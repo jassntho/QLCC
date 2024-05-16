@@ -1,5 +1,32 @@
 CREATE DATABASE QLCC
 USE QLCC
+	
+CREATE TABLE Unit (
+	Unit_ID INT PRIMARY KEY,
+	Property_ID INT,
+	Number VARCHAR(50) NOT NULL,
+	Floor INT,
+	Rent DECIMAL(10,2),
+	Status VARCHAR(50)
+);
+
+CREATE TABLE Lease (
+	Lease_ID INT PRIMARY KEY,
+	Unit_ID INT FOREIGN KEY REFERENCES Unit(Unit_ID),
+	Tenant_ID INT FOREIGN KEY REFERENCES Tenant(Tenant_ID),
+	Start_Date DATE,
+	End_Date DATE,
+	Monthly_Rent DECIMAL(10,2),
+	Deposit DECIMAL(10,2)
+);
+
+CREATE TABLE Payment (
+	Payment_ID INT PRIMARY KEY,
+	Lease_ID INT FOREIGN KEY REFERENCES Lease(Lease_ID),
+	Date DATE,
+	Amount DECIMAL(10,2),
+	Payment_Type VARCHAR(50)
+);
 
 CREATE TABLE Tenant (
 	Tenant_ID INT PRIMARY KEY,
