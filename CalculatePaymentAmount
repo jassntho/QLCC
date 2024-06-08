@@ -1,0 +1,66 @@
+DELIMITER //
+
+CREATE PROCEDURE CalculatePaymentAmount()
+BEGIN
+    DECLARE done INT DEFAULT 0;
+    DECLARE p_id CHAR(4);
+    DECLARE l_id CHAR(4);
+    DECLARE unit_id CHAR(4);
+    DECLARE tenant_id CHAR(4);
+    DECLARE property_id CHAR(4);
+    DECLARE monthly_rent DECIMAL(10,2);
+    DECLARE booking_cost DECIMAL(10,2);
+    DECLARE contract_cost DECIMAL(10,2);
+    DECLARE total_amount DECIMAL(10,2);
+
+    -- Declare a cursor to iterate through the Payment records
+    DECLARE payment_cursor CURSOR FOR
+        SELECT Payment_ID, Lease_ID FROM Payment;
+
+    -- Declare continue handler for cursor
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
+
+    OPEN payment_cursor;
+
+    read_loop: LOOP
+        FETCH payment_cursor INTO p_id, l_id;
+        
+        IF done THEN
+            LEAVE read_loop;
+        END IF;
+
+        -- Initialize variables
+        SET monthly_rent = 0;
+        SET booking_cost = 0;
+        SET contract_cost = 0;
+        SET total_amount = 0;
+
+        -- Get Unit_ID and Tenant_ID from the Lease table
+        SELECT Unit_ID, Tenant_ID INTO unit_id, tenant_id FROM Lease WHERE Lease_ID = l_id;
+
+        -- Get Monthly_Rent from the Lease table
+        SELECT Monthly_Rent INTO monthly_rent FROM Lease WHERE Lease_ID = l_id;
+
+        -- Get Property_ID from the Unit table
+        SELECT Property_ID INTO property_id FROM Unit WHERE Unit_ID = unit_id;
+
+        -- Calculate the total booking cost for the tenant
+        SELECT Cost INTO booking_cost
+        FROM Booking
+        WHERE Tenant_ID = tenant_id;
+
+        -- Calculate the total contract cost for the property
+        SELECT Cost INTO contract_cost
+        FROM Contract
+        WHERE Property_ID = property_id;
+
+        -- Calculate the total amount
+        SET total_amount = monthly_rent + booking_cost + contract_cost;
+
+        -- Update the Amount in the Payment table
+        UPDATE Payment SET Amount = total_amount WHERE Payment_ID = p_id;
+    END LOOP;
+
+    CLOSE payment_cursor;
+END //
+DELIMITER ;
