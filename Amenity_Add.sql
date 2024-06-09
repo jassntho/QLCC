@@ -10,4 +10,4 @@ BEGIN
   INSERT INTO Amenity (Property_ID, Amenity_Name, Description)
   VALUES (prop_id, amenity_name, description);
 END//
-DELIMITER ;
+DELIMITER;
