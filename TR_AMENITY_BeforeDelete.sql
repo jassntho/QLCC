@@ -7,7 +7,7 @@ FOR EACH ROW
 BEGIN
 -- Update information for all products supplied by the deleted supplier
 	UPDATE Booking
-	SET Amenity_ID = NULL, Tenant_ID = NULL, Cost = 0
+	SET Amenity_ID = NULL, Tenant_ID = NULL
 	WHERE Amenity_ID = OLD.Amenity_ID;
 END //
 DELIMITER ;
