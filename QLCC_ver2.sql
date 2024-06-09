@@ -1393,69 +1393,59 @@ END //
 DELIMITER ;
 
 DELIMITER //
-CREATE PROCEDURE CalculatePaymentAmount()
+CREATE PROCEDURE UpdatePaymentAmounts()
 BEGIN
     DECLARE done INT DEFAULT 0;
-    DECLARE p_id CHAR(4);
-    DECLARE l_id CHAR(4);
-    DECLARE unit_id CHAR(4);
-    DECLARE tenant_id CHAR(4);
-    DECLARE property_id CHAR(4);
-    DECLARE monthly_rent DECIMAL(10,2);
-    DECLARE booking_cost DECIMAL(10,2);
-    DECLARE contract_cost DECIMAL(10,2);
-    DECLARE total_amount DECIMAL(10,2);
-
-    -- Declare a cursor to iterate through the Payment records
+    DECLARE v_Lease_ID CHAR(4);
+    DECLARE v_Date DATE;
+    DECLARE v_Property_ID CHAR(4);
+    DECLARE v_Monthly_Rent DECIMAL(5,2);
+    DECLARE v_Total_Contract_Cost DECIMAL(10,2) DEFAULT 0;
+    DECLARE v_Total_Booking_Cost DECIMAL(10,2) DEFAULT 0;
+    DECLARE v_Tenant_ID CHAR(4);
+    -- Declare a cursor to iterate through the Payment table
     DECLARE payment_cursor CURSOR FOR
-        SELECT Payment_ID, Lease_ID FROM Payment;
-
-    -- Declare continue handler for cursor
+        SELECT Lease_ID, Date
+        FROM Payment;
+    -- Declare a handler to set the done flag
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
-
+    -- Open the cursor
     OPEN payment_cursor;
-
-    read_loop: LOOP
-        FETCH payment_cursor INTO p_id, l_id;
-        
+    payment_loop: LOOP
+        -- Fetch the next row from the cursor
+        FETCH payment_cursor INTO v_Lease_ID, v_Date;
+        -- Exit the loop if no more rows
         IF done THEN
-            LEAVE read_loop;
+            LEAVE payment_loop;
         END IF;
-
-        -- Initialize variables
-        SET monthly_rent = 0;
-        SET booking_cost = 0;
-        SET contract_cost = 0;
-        SET total_amount = 0;
-
-        -- Get Unit_ID and Tenant_ID from the Lease table
-        SELECT Unit_ID, Tenant_ID INTO unit_id, tenant_id FROM Lease WHERE Lease_ID = l_id;
-
-        -- Get Monthly_Rent from the Lease table
-        SELECT Monthly_Rent INTO monthly_rent FROM Lease WHERE Lease_ID = l_id;
-
-        -- Get Property_ID from the Unit table
-        SELECT Property_ID INTO property_id FROM Unit WHERE Unit_ID = unit_id;
-
-        -- Calculate the total booking cost for the tenant
-        SELECT IFNULL(SUM(Cost), 0) INTO booking_cost
-        FROM Booking
-        WHERE Tenant_ID = tenant_id;
-
-        -- Calculate the total contract cost for the property
-        SELECT IFNULL(SUM(Cost), 0) INTO contract_cost
-        FROM Contract
-        WHERE Property_ID = property_id;
-
-        -- Calculate the total amount
-        SET total_amount = monthly_rent + booking_cost + contract_cost;
-
-        -- Update the Amount in the Payment table
-        UPDATE Payment SET Amount = total_amount WHERE Payment_ID = p_id;
+        -- Reset total costs for each iteration
+        SET v_Total_Contract_Cost = 0;
+        SET v_Total_Booking_Cost = 0;
+        -- Get Monthly Rent, Property_ID, and Tenant_ID from Lease and Unit tables
+        SELECT L.Unit_ID, L.Monthly_Rent, U.Property_ID
+        INTO v_Tenant_ID, v_Monthly_Rent, v_Property_ID
+        FROM Lease L
+        JOIN Unit U ON L.Unit_ID = U.Unit_ID
+        WHERE L.Lease_ID = v_Lease_ID;
+        -- Calculate total contract cost for the property
+        SELECT SUM(C.Cost)
+        INTO v_Total_Contract_Cost
+        FROM Contract C
+        WHERE C.Property_ID = v_Property_ID
+          AND v_Date BETWEEN C.Start_Date AND C.End_Date;
+        -- Calculate total booking cost for the tenant
+        SELECT SUM(B.Cost)
+        INTO v_Total_Booking_Cost
+        FROM Booking B
+        WHERE B.Tenant_ID = v_Tenant_ID
+          AND v_Date BETWEEN B.Start_Date AND B.End_Date;
+        -- Update the Payment amount
+        UPDATE Payment
+        SET Amount = v_Monthly_Rent + IFNULL(v_Total_Contract_Cost, 0) + IFNULL(v_Total_Booking_Cost, 0)
+        WHERE Lease_ID = v_Lease_ID
+          AND Date = v_Date;
     END LOOP;
-
+    -- Close the cursor
     CLOSE payment_cursor;
 END //
 DELIMITER ;
-
-
