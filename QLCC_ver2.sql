@@ -1368,30 +1368,6 @@ BEGIN
 END//
 DELIMITER ;
 
--- Add column salt into table Tenant
-ALTER TABLE Tenant
-ADD COLUMN salt VARCHAR(20) NOT NULL;
-DELIMITER //
-CREATE PROCEDURE Tenant_Add(
-    IN p_host INT,
-    IN p_name VARCHAR(50),
-    IN p_phone VARCHAR(10),
-    IN p_email VARCHAR(50),
-    IN p_birthdate DATE,
-    IN p_password VARCHAR(20)
-)
-BEGIN
-    DECLARE salt_value VARCHAR(20);
-    -- Generate a new salt value
-    SET salt_value = SHA2(UUID(), 256);
-    -- Hash the password with the salt
-    SET p_password = SHA2(CONCAT(p_password, salt_value), 256);
-    -- Insert new tenant with hashed password and salt
-    INSERT INTO Tenant (Host, Tenant_Name, Phone_Number, Tenant_Email, Date_of_Birth, accPassword, salt)
-    VALUES (p_host, p_name, p_phone, p_email, p_birthdate, p_password, salt_value);
-END //
-DELIMITER ;
-
 DELIMITER //
 CREATE PROCEDURE UpdatePaymentAmounts()
 BEGIN
@@ -1449,3 +1425,142 @@ BEGIN
     CLOSE payment_cursor;
 END //
 DELIMITER ;
+
+DELIMITER //
+-- Create a role for Manager
+CREATE ROLE 'manager_role';
+-- Create a role for Tenant
+CREATE ROLE 'tenant_role';
+//
+DELIMITER ;
+
+-- Create Manager user and assign Manager role
+CREATE USER 'manager_user'@'localhost' IDENTIFIED BY 'manager';
+GRANT 'manager_role' TO 'manager_user'@'localhost';
+SET DEFAULT ROLE 'manager_role' TO 'manager_user'@'localhost';
+-- Create Tenant user and assign Tenant role
+CREATE USER 'tenant_user'@'localhost' IDENTIFIED BY 'tenant';
+GRANT 'tenant_role' TO 'tenant_user'@'localhost';
+SET DEFAULT ROLE 'tenant_role' TO 'tenant_user'@'localhost';
+-- Tables by manager
+GRANT SELECT, INSERT, UPDATE ON qlcc.Property TO manager_role WITH GRANT OPTION;
+GRANT SELECT, INSERT, UPDATE, DELETE ON qlcc.Vendor TO manager_role WITH GRANT OPTION;
+GRANT SELECT, INSERT, UPDATE ON qlcc.Unit TO manager_role WITH GRANT OPTION;
+GRANT SELECT, INSERT, UPDATE, DELETE ON qlcc.Lease TO manager_role WITH GRANT OPTION;
+GRANT SELECT, INSERT, UPDATE, DELETE ON qlcc.Payment TO manager_role WITH GRANT OPTION;
+GRANT SELECT, INSERT, UPDATE, DELETE ON qlcc.Tenant TO manager_role WITH GRANT OPTION;
+GRANT SELECT, INSERT, UPDATE, DELETE ON qlcc.Amenity TO manager_role WITH GRANT OPTION;
+GRANT SELECT, INSERT, UPDATE ON qlcc.Booking TO manager_role WITH GRANT OPTION;
+GRANT SELECT, INSERT, UPDATE ON qlcc.Contract TO manager_role WITH GRANT OPTION;
+-- Tables by tenant
+GRANT SELECT ON qlcc.Property TO tenant_role WITH GRANT OPTION;
+GRANT SELECT ON qlcc.Vendor TO tenant_role WITH GRANT OPTION;
+GRANT SELECT ON qlcc.Unit TO tenant_role WITH GRANT OPTION;
+GRANT SELECT ON qlcc.Lease TO tenant_role WITH GRANT OPTION;
+GRANT SELECT ON qlcc.Payment TO tenant_role WITH GRANT OPTION;
+GRANT SELECT ON qlcc.Tenant TO tenant_role WITH GRANT OPTION;
+GRANT SELECT ON qlcc.Amenity TO tenant_role WITH GRANT OPTION;
+GRANT SELECT, INSERT, UPDATE, DELETE ON qlcc.Booking TO tenant_role WITH GRANT OPTION;
+GRANT SELECT, INSERT, UPDATE, DELETE ON qlcc.Contract TO tenant_role WITH GRANT OPTION;
+
+-- manager_role
+-- Store Procedures, WITH GRANT OPTION: duoc cap quyen va co the cap quyen lai cho nguoi khac
+GRANT EXECUTE ON PROCEDURE QLCC.Bill_unit_month TO manager_role WITH GRANT OPTION;
+GRANT EXECUTE ON PROCEDURE QLCC.UnitAvailable_GetList TO manager_role WITH GRANT OPTION;
+GRANT EXECUTE ON PROCEDURE QLCC.Tenant_GetList TO manager_role WITH GRANT OPTION;
+GRANT EXECUTE ON PROCEDURE QLCC.Amenity_Add TO manager_role WITH GRANT OPTION;
+GRANT EXECUTE ON PROCEDURE QLCC.BookAmenity TO manager_role WITH GRANT OPTION;
+GRANT EXECUTE ON PROCEDURE QLCC.Add_Lease TO manager_role WITH GRANT OPTION;
+-- functions 
+GRANT EXECUTE ON FUNCTION QLCC.Rented_Unit_CountByYear TO manager_role WITH GRANT OPTION;
+GRANT EXECUTE ON FUNCTION QLCC.GetResidentCountForBuilding TO manager_role WITH GRANT OPTION;
+GRANT EXECUTE ON FUNCTION QLCC.Tenant_CountByMonth TO manager_role WITH GRANT OPTION;
+
+-- tenant-role
+-- Store Procedures
+GRANT EXECUTE ON PROCEDURE QLCC.Bill_unit_month TO tenant_role;
+GRANT EXECUTE ON PROCEDURE QLCC.UnitAvailable_GetList TO tenant_role;
+GRANT EXECUTE ON PROCEDURE QLCC.BookAmenity TO tenant_role;
+-- functions 
+GRANT EXECUTE ON FUNCTION QLCC.Rented_Unit_CountByYear TO tenant_role;
+GRANT EXECUTE ON FUNCTION QLCC.GetResidentCountForBuilding TO tenant_role;
+GRANT EXECUTE ON FUNCTION QLCC.Tenant_CountByMonth TO tenant_role;
+
+-- Add column salt into table Tenant
+ALTER TABLE Tenant
+ADD COLUMN salt VARCHAR(20) NOT NULL;
+DELIMITER //
+CREATE PROCEDURE Tenant_Add(
+    IN p_host INT,
+    IN p_name VARCHAR(50),
+    IN p_phone VARCHAR(10),
+    IN p_email VARCHAR(50),
+    IN p_birthdate DATE,
+    IN p_password VARCHAR(20)
+)
+BEGIN
+    DECLARE salt_value VARCHAR(20);
+    -- Generate a new salt value
+    SET salt_value = SHA2(UUID(), 256);
+    -- Hash the password with the salt
+    SET p_password = SHA2(CONCAT(p_password, salt_value), 256);
+    -- Insert new tenant with hashed password and salt
+    INSERT INTO Tenant (Host, Tenant_Name, Phone_Number, Tenant_Email, Date_of_Birth, accPassword, salt)
+    VALUES (p_host, p_name, p_phone, p_email, p_birthdate, p_password, salt_value);
+END //
+DELIMITER ;
+
+-- View
+-- View để ẩn mật khẩu cho Tenant
+	﻿ALTER TABLE Tenant ADD COLUMN Password VARCHAR(255);
+	CREATE VIEW Tenant_View AS
+	SELECT Tenant_ID, Tenant_Name, Phone_Number, Email, Date_of_Birth, Unit_Owner
+	FROM Tenant;
+	-- Thu hồi quyền SELECT trên bảng Tenant từ tenant_role
+	REVOKE SELECT ON qlcc.Tenant FROM tenant_role;
+	-- Cấp quyền SELECT trên view Tenant_View cho tenant_role
+	GRANT SELECT ON qlcc.Tenant_View TO tenant_role;
+-- View để ẩn giá của Payment cho Tenant
+	﻿CREATE VIEW Payment_View AS
+	SELECT Payment_ID, Lease_ID, Date, Payment_Type
+	FROM Payment;
+	-- Thu hồi quyền SELECT trên bảng Payment từ tenant_role
+	REVOKE SELECT ON qlcc.Payment FROM tenant_role;
+	-- Cấp quyền SELECT trên view Payment_View cho tenant_role
+	GRANT SELECT ON qlcc.Payment_View TO tenant_role;
+-- View để xem số Tenant còn ở
+	CREATE VIEW Current_Tenants AS
+	SELECT t.Tenant_ID, t.Tenant_Name, t.Phone_Number, t.Email, t.Date_of_Birth, t.Unit_Owner, l.Unit_ID, l.Start_Date, l.End_Date
+	FROM Tenant t
+	JOIN Lease l ON t.Tenant_ID = l.Tenant_ID
+	WHERE l.End_Date >= CURDATE();
+	GRANT SELECT ON qlcc.Current_Tenants TO tenant_role;
+-- View xem số lượng booking cho mỗi Amenity dựa trên khoảng thời gian booking
+	CREATE VIEW Amenity_Booking_Count AS
+	SELECT a.Amenity_ID, a.Amenity_Name, COUNT(b.Booking_ID) AS Booking_Count
+	FROM Amenity a
+	LEFT JOIN Booking b ON a.Amenity_ID = b.Amenity_ID
+	GROUP BY a.Amenity_ID, a.Amenity_Name;
+	GRANT SELECT ON qlcc.Amenity_Booking_Count TO tenant_role;
+-- View để xem chi tiết hóa đơn
+	CREATE VIEW Invoice_Details AS
+	SELECT p.Payment_ID, p.Date AS Payment_Date, p.Amount AS Payment_Amount, p.Payment_Type, l.Lease_ID, t.Tenant_ID, t.Tenant_Name, t.Phone_Number, t.Email, u.Unit_ID, u.Number AS Unit_Number, u.Floor AS Unit_Floor, u.Rent AS Unit_Rent
+	FROM Payment p
+	JOIN Lease l ON p.Lease_ID = l.Lease_ID
+	JOIN Tenant t ON l.Tenant_ID = t.Tenant_ID
+	JOIN Unit u ON l.Unit_ID = u.Unit_ID;
+	GRANT SELECT ON qlcc.Invoice_Details TO tenant_role;
+-- View để xem chi tiết thông tin của dịch vụ
+	CREATE VIEW Amenity_Details AS
+	SELECT a.Amenity_ID, a.Amenity_Name, a.A_Description, p.Property_ID, p.Property_Name, p.Property_Address
+	FROM Amenity a
+	JOIN Property p ON a.Property_ID = p.Property_ID;
+	GRANT SELECT ON qlcc.Amenity_Details TO tenant_role;
+-- View xem thông tin thanh toán của cư dân
+	CREATE VIEW Tenant_Payment_Details AS
+	SELECT p.Payment_ID, p.Date AS Payment_Date, p.Amount AS Payment_Amount, p.Payment_Type, t.Tenant_ID, t.Tenant_Name, t.Phone_Number, t.Email
+	FROM Payment p
+	JOIN Lease l ON p.Lease_ID = l.Lease_ID
+	JOIN Tenant t ON l.Tenant_ID = t.Tenant_ID;
+	GRANT SELECT ON qlcc.Tenant_Payment_Details TO tenant_role;
+
